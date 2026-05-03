@@ -2,3 +2,7 @@
 /bazel-*
 
 get_kepler.sh
+
+/astronet/docs_own/
+/astronet/docs_own/*.txt
+/astronet/docs_own/*.md
