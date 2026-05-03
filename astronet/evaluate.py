@@ -1,0 +1,93 @@
+# Copyright 2018 The Exoplanet ML Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Script for evaluating an AstroNet model."""
+
+import argparse
+import logging
+
+import tensorflow as tf
+
+from astronet import models
+from astronet.util import estimator_util
+from tf_util import config_util
+from tf_util import configdict
+from tf_util import estimator_runner
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "--model", type=str, required=True, help="Name of the model class.")
+
+parser.add_argument(
+    "--config_name",
+    type=str,
+    help="Name of the model and training configuration. Exactly one of "
+    "--config_name or --config_json is required.")
+
+parser.add_argument(
+    "--config_json",
+    type=str,
+    help="JSON string or JSON file containing the model and training "
+    "configuration. Exactly one of --config_name or --config_json is required.")
+
+parser.add_argument(
+    "--eval_files",
+    type=str,
+    required=True,
+    help="Comma-separated list of file patterns matching the TFRecord files in "
+    "the evaluation dataset.")
+
+parser.add_argument(
+    "--model_dir",
+    type=str,
+    required=True,
+    help="Directory containing a model checkpoint.")
+
+parser.add_argument(
+    "--eval_name", type=str, default="test", help="Name of the evaluation set.")
+
+
+def main(args):
+  model_class = models.get_model_class(args.model)
+
+  # Look up the model configuration.
+  assert (args.config_name is None) != (args.config_json is None), (
+      "Exactly one of --config_name or --config_json is required.")
+  config = (
+      models.get_model_config(args.model, args.config_name)
+      if args.config_name else config_util.parse_json(args.config_json))
+
+  config = configdict.ConfigDict(config)
+
+  # Create the estimator.
+  estimator = estimator_util.create_estimator(
+      model_class, config.hparams, model_dir=args.model_dir)
+
+  # Create an input function that reads the evaluation dataset.
+  input_fn = estimator_util.create_input_fn(
+      file_pattern=args.eval_files,
+      input_config=config.inputs,
+      mode=tf.estimator.ModeKeys.EVAL)
+
+  # Run evaluation. This will log the result to stderr and also write a summary
+  # file in the model_dir.
+  eval_args = {"name": args.eval_name, "input_fn": input_fn}
+  estimator_runner.evaluate(estimator, [eval_args])
+
+
+if __name__ == "__main__":
+  logging.basicConfig(level=logging.INFO)
+  args, unparsed = parser.parse_known_args()
+  main(args)

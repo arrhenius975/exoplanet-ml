@@ -1,0 +1,117 @@
+Modernization study for astronet
+I reviewed the repository and the astronet package in detail. The core structure is solid and should be preserved, but several modernization areas are needed before this package is cleanly usable today.
+
+Current state
+What is already good
+astronet is already organized in a modular way:
+train.py, evaluate.py, predict.py are entrypoints
+models.py is the model registry
+astro_*_model/ directories are separate architectures
+data/ contains preprocessing and TFRecord generation
+ops/ contains dataset, metrics, and training logic
+util/estimator_util.py centralizes Estimator creation
+Main modernization blockers
+pyproject.toml claims modern Python and tensorflow-cpu>=2.15.0
+Most code still uses TF1-style APIs and compatibility shims:
+tf.disable_v2_behavior()
+tf.logging
+tf.app.run
+tf.python_io.TFRecordWriter
+tf.train.*, tf.metrics.*
+tf.GraphKeys
+Package metadata is incomplete for a real installable package:
+no package discovery settings in pyproject.toml
+no entry points for CLI scripts
+Tests and code rely on TF1 training semantics and graph-mode placeholders
+astrowavenet and beam are legacy branches with the same TF1 issues
+What should be changed
+1. Packaging and dependency alignment
+Update pyproject.toml so the repo is actually installable:
+specify package discovery for astronet, astrowavenet, light_curve, tf_util, and maybe third_party
+add CLI entry points for astronet.train, astronet.evaluate, astronet.predict
+Align dependencies with actual code:
+if the package stays TF1-compatible, don’t claim tensorflow-cpu>=2.15.0 without testing compatibility
+if the goal is modern TF2, add tensorflow>=2.15.0 and remove legacy TF1-only constructs
+2. TF1 compatibility cleanup
+Replace deprecated TF1-only APIs with TF2-compatible equivalents:
+tf.logging → Python logging
+tf.app.run → normal argparse + main()
+tf.python_io.TFRecordWriter → tf.io.TFRecordWriter
+tf.gfile.MakeDirs → tf.io.gfile.makedirs or pathlib.Path.mkdir
+tf.disable_v2_behavior() can remain only if using compat.v1, but ideally migrate away
+Keep the existing architecture the same while cleaning these interfaces
+3. Estimator / training / metric modernization
+estimator_util.py
+keep the wrapper structure, but verify it works reliably on TF2
+training.py
+convert optimizer creation to tf.keras.optimizers or keep compat wrappers
+remove TF1-only assumptions about tf.contrib
+metrics.py
+migrate metric definitions from old tf.metrics and manual graph variables to TF2/Keras metrics if possible
+astro_model.py
+remove graph-mode placeholder patterns like tf.placeholder_with_default
+if preserving Estimator, keep tf.compat.v1 for these pieces but modernize the layer construction path
+generate_input_records.py
+modernize logging and file I/O
+keep TFRecord generation unchanged logically
+4. Keep the structure intact
+Do not move files into new package layout
+Keep:
+data
+ops
+util
+astronet/astro_*_model/
+Use the same models.py registry model
+Keep train.py, evaluate.py, and predict.py as the public API
+5. Test and compatibility cleanup
+Update tests where they use tf.disable_v2_behavior() and graph scaffolds
+Add modern packaging/test CI if desired
+Ensure pytest can discover tests and that the package imports cleanly
+Concrete phased plan
+Phase 0: packaging first
+Fix pyproject.toml package discovery
+Add package metadata for package install and CLI entrypoints
+Confirm root packages are discoverable
+Phase 1: compatibility cleanup
+Replace legacy TF1 helpers in generate_input_records.py
+Replace tf.logging, tf.app, tf.python_io, tf.gfile across astronet
+Replace tf.disable_v2_behavior() usage with explicit compat imports only where needed
+Phase 2: Estimator / training modernization
+Validate estimator_util.py on TF2
+Migrate training.py and metrics.py
+Refactor astro_model.py and subclasses to use Keras layers consistently
+Keep behavior identical via compatibility wrappers
+Phase 3: test and verify
+Run existing tests
+Add packaging validation
+Confirm train.py / evaluate.py / predict.py still work with existing TFRecords
+Verify pyproject install and pip install -e .
+Files that need the most attention
+High priority:
+
+pyproject.toml
+generate_input_records.py
+estimator_util.py
+training.py
+metrics.py
+astro_model.py
+train.py
+evaluate.py
+predict.py
+Medium priority:
+
+config_util.py
+estimator_runner.py
+model-specific files in astro_fc_model/ and astro_cnn_model/
+tests that depend on TF1 graph-mode features
+Lower priority:
+
+astrowavenet and beam legacy code, unless you want to modernize the whole repo at once
+Recommendation
+To preserve originality, the safest modernization path is:
+
+keep the current astronet architecture
+modernize module APIs and package metadata
+avoid an architectural rewrite
+treat TF2 migration as a compatibility/refactor project rather than a redesign
+If you want, I can next produce a concrete branch plan and implement the first modernization pass for astronet only.

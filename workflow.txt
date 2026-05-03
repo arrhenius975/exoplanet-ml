@@ -1,0 +1,188 @@
+Repository overview
+This repository is an old TensorFlow V1-based exoplanet ML project. The main work is split into:
+
+astronet — main exoplanet classification pipeline for Kepler TCEs
+astrowavenet — a separate WaveNet-style generative light curve model
+light_curve — Kepler light curve I/O, binning, and preprocessing utilities
+tf_util — shared TensorFlow helper code for configs, Estimators, and TFRecords
+third_party — vendored external code used by preprocessing
+beam, box_least_squares, experimental — extra tools/research code not central to the main classification pipeline
+astronet — main classification package
+This is the core detection pipeline. It contains:
+
+Top-level files
+train.py
+CLI entrypoint for training an AstroNet model
+Loads model class and config
+Creates a TensorFlow Estimator
+Builds input pipeline from TFRecord files
+Trains or alternates training/evaluation
+evaluate.py
+CLI entrypoint for evaluating a trained AstroNet model against TFRecords
+predict.py
+CLI entrypoint for inference on a single TCE
+Reads raw Kepler data, preprocesses it, makes global_view and local_view
+Calls estimator.predict()
+Model registry
+models.py
+Central map from model name string to model class + config module
+Example names: AstroModel, AstroFCModel, AstroCNNModel
+Used by train.py, evaluate.py, predict.py
+Model implementations
+Each model type has its own subpackage:
+
+astro_model
+astro_model.py
+configurations.py
+astro_fc_model
+astro_fc_model.py
+configurations.py
+astro_cnn_model
+astro_cnn_model.py
+configurations.py
+These define:
+
+the model class
+the network architecture
+the configuration builder functions
+Data and preprocessing
+generate_download_script.py
+Builds a shell script to download Kepler FITS files for the selected TCEs
+generate_input_records.py
+Converts raw TCE metadata + light curve data into TFRecord examples
+preprocess.py
+Reads light curves
+Removes low-frequency variability with a spline
+Phase-folds the light curve
+Builds global_view and local_view arrays
+Produces TF examples for training/inference
+Ops and training helpers
+dataset_ops.py
+Builds the tf.data.Dataset input pipeline
+Parses TFRecord examples based on config
+Batches, shuffles, filters label IDs, handles padding
+metrics.py
+Evaluation metrics for the models
+training.py
+Creates optimizers and training ops
+Estimator glue
+estimator_util.py
+Creates Estimator/TPUEstimator objects
+Wraps model classes into model_fn
+Creates input functions for train/eval
+This is the main bridge between train.py and the model/ops code
+astrowavenet — generative model package
+This package is separate from astronet and focuses on generative modeling:
+
+astrowavenet_model.py
+WaveNet-style autoregressive model for light curves
+Uses causal convolutions, residual blocks, and distribution outputs
+trainer.py
+Training entrypoint for AstroWaveNet
+Uses Bazel-style run from repository root (WORKSPACE)
+configurations.py
+Hyperparameters and dataset configuration
+data
+Synthetic transit dataset generation and I/O
+util
+Support helpers for AstroWaveNet
+This package is the “light-curve generation” side of the repo, not the classification side.
+
+light_curve — raw Kepler light curve utilities
+This package is used by astronet preprocessing and by other analysis code:
+
+kepler_io.py
+Finds Kepler FITS filenames
+Reads raw light curve segments
+binning.py
+Bins phase-folded light curves into fixed-length views
+util.py
+Utilities like gap splitting, phase folding, normalization
+periodic_event.py
+Periodic event / transit-time utilities
+README.md
+Domain explanation of Kepler data and file format
+preprocess.py imports from light_curve directly.
+
+tf_util — shared TensorFlow tooling
+This package is used by both astronet and possibly other components:
+
+config_util.py
+Parses JSON config strings/files
+Logs and saves config
+configdict.py
+Flexible config dictionary wrapper
+estimator_runner.py
+Training/evaluation control loops
+Continuous train-and-eval support
+example_util.py
+Helpers for building tf.train.Example proto features
+__init__.py
+Package root
+This is the generic glue layer for TensorFlow Estimator jobs.
+
+third_party — external dependencies
+kepler_spline
+Spline-fitting code for detrending Kepler light curves
+robust_mean
+Robust statistics utilities
+These are used by preprocess.py and related preprocessing.
+
+How the pieces connect
+train.py
+
+Loads model and config via models.py
+Creates Estimator with estimator_util.py
+Uses dataset_ops.py to read TFRecords
+Trains the model
+predict.py
+
+Reads raw Kepler data via preprocess.py
+Uses kepler_io.py, util.py, and third_party.kepler_spline
+Builds feature arrays for a single TCE
+Feeds them into the trained Estimator
+generate_input_records.py
+
+Produces the training/eval TFRecords that dataset_ops.py consumes
+models.py
+
+Provides the mapping from model names to actual model classes
+Each model implementation in astro_*_model/ is pluggable through this registry
+Practical map of folders
+astronet = main pipeline
+
+train.py, evaluate.py, predict.py
+models.py
+data/ = data ingestion and TFRecord creation
+ops/ = dataset and training/metrics code
+util/ = Estimator wrapper
+astrowavenet = separate WaveNet generative system
+
+model, trainer, config, synthetic data
+light_curve = raw Kepler file handling and signal processing
+
+used by astronet preprocessing
+tf_util = TensorFlow helper infrastructure
+
+config, example proto helpers, Estimator control loops
+third_party = vendored algorithmic dependencies
+
+If you want to explore next
+Start here for the main classification flow:
+
+train.py
+models.py
+estimator_util.py
+dataset_ops.py
+preprocess.py
+astro_cnn_model.py (one of the main model architectures)
+For the generative side:
+
+astrowavenet_model.py
+trainer.py
+For raw data handling:
+
+kepler_io.py
+binning.py
+util.py
+If you want, I can also draw a diagram of the data flow between these modules.
